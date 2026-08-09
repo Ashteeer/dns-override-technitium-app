@@ -50,6 +50,9 @@
 
 Обратный канал: приложение пишет `runtime-state.json`, бот читает его для `/status`
 и чтобы убедиться, что `appliedRevision` догнал `revision` записанного файла.
+Канал вспомогательный: его недоступность приложение переживает молча — один
+раз пишет в журнал, при возможности откатывается на каталог приложения и
+продолжает пробовать основной путь (D24).
 
 Кэш Technitium автоматически не сбрасывается. Приложение этого не умеет в принципе:
 в его интерфейсе (`IDnsServer`, `IDnsCache`) операции сброса нет — только
@@ -102,10 +105,19 @@ Task<DnsDatagram?> ProcessRequestAsync(
 | владелец и setgid | `dns-override-bot:dns-override`, режим `2770` — новые файлы наследуют группу |
 | членство в группе | пользователь Technitium добавляется в `dns-override` (`usermod -aG`) |
 | **POSIX ACL** | `setfacl` на каталог + default-записи для новых файлов |
+| **drop-in systemd** | `ReadWritePaths=/etc/dns-override` для `dns.service` |
 
 ACL — основной механизм, членство в группе оставлено запасным. Причина: дополнительные
 группы читаются процессом **при старте**, поэтому после `usermod` Technitium пришлось бы
 перезапускать, а ACL действует немедленно.
+
+Drop-in решает другую задачу и ACL не заменяет. При `ProtectSystem=full` (или
+`strict`) в юните DNS-сервера systemd монтирует `/etc` внутрь сервиса только для
+чтения, и запись падает с `Read-only file system` при любых правах. Файл
+`/etc/systemd/system/dns.service.d/10-dns-override.conf` живёт отдельно от
+`dns.service`, поэтому переживает обновление Technitium; применяется он только
+при **перезапуске** сервиса. Там же выдаётся `AmbientCapabilities=CAP_NET_ADMIN`,
+если на сервере стоит DNS IPCollector с его `ipset` (D27).
 
 ```bash
 setfacl -m u:dns:rwx              -m d:u:dns:rw-              /etc/dns-override

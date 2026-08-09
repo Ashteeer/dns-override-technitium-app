@@ -6,7 +6,10 @@
 		<OutputType>Library</OutputType>
 		<AssemblyName>DnsOverrideApp</AssemblyName>
 		<RootNamespace>DnsOverride</RootNamespace>
-		<Version>0.2.0</Version>
+		<!-- Только два числа: Technitium показывает версию приложения без незначащих
+		     нулей, поэтому 0.3.0 у него превращается в «0.3», и бот считал бы релиз
+		     v0.3.0 новее установленного вечно. Тег релиза — vX.Y (docs/decisions.md, D25). -->
+		<Version>0.3</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 		<Authors>Ashteeer</Authors>
 		<Company>DNS Override</Company>

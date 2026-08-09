@@ -53,11 +53,17 @@ public class LoaderTests : IDisposable
 
         AppConfig config = AppConfig.Parse(configJson);
         RuntimeStateData state = new RuntimeStateData() { StartedAtUtc = DateTime.UtcNow };
-        RulesetLoader loader = new RulesetLoader(config, _log, new Stats(DateTime.UtcNow), state);
+        RulesetLoader loader = new RulesetLoader(config, _log, new Stats(DateTime.UtcNow), state, NewChannel(config));
 
         _loaders.Add(loader);
 
         return loader;
+    }
+
+    /// <summary>Канал без запасного пути: в тестах загрузчика падать записи некуда и незачем.</summary>
+    RuntimeStateChannel NewChannel(AppConfig config)
+    {
+        return new RuntimeStateChannel(config.RuntimeStatePath, "", _log);
     }
 
     static async Task<bool> WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
@@ -140,7 +146,7 @@ public class LoaderTests : IDisposable
         }
         """);
 
-        RulesetLoader loader = new RulesetLoader(config, _log, new Stats(DateTime.UtcNow), new RuntimeStateData() { StartedAtUtc = DateTime.UtcNow });
+        RulesetLoader loader = new RulesetLoader(config, _log, new Stats(DateTime.UtcNow), new RuntimeStateData() { StartedAtUtc = DateTime.UtcNow }, NewChannel(config));
         _loaders.Add(loader);
 
         await loader.StartAsync();

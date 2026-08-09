@@ -40,6 +40,7 @@ namespace DnsOverride
         readonly ILogSink _log;
         readonly Stats _stats;
         readonly RuntimeStateData _state;
+        readonly RuntimeStateChannel _runtimeState;
         readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
         readonly object _stateLock = new object();
 
@@ -58,12 +59,13 @@ namespace DnsOverride
 
         #region constructor
 
-        public RulesetLoader(AppConfig config, ILogSink log, Stats stats, RuntimeStateData state)
+        public RulesetLoader(AppConfig config, ILogSink log, Stats stats, RuntimeStateData state, RuntimeStateChannel runtimeState)
         {
             _config = config;
             _log = log;
             _stats = stats;
             _state = state;
+            _runtimeState = runtimeState;
         }
 
         #endregion
@@ -206,37 +208,34 @@ namespace DnsOverride
             }
         }
 
+        /// <summary>
+        /// Снять состояние и отдать его в канал. Ошибки записи канал гасит сам:
+        /// runtime-state.json — отчёт боту, а не условие работы приложения.
+        /// </summary>
         public void WriteRuntimeState()
         {
-            try
-            {
-                RuntimeStateData copy;
+            RuntimeStateData copy;
 
-                lock (_stateLock)
+            lock (_stateLock)
+            {
+                copy = new RuntimeStateData()
                 {
-                    copy = new RuntimeStateData()
-                    {
-                        AppVersion = _state.AppVersion,
-                        StartedAtUtc = _state.StartedAtUtc,
-                        LastLoadAtUtc = _state.LastLoadAtUtc,
-                        LastLoadDurationMs = _state.LastLoadDurationMs,
-                        LastLoadTrigger = _state.LastLoadTrigger,
-                        AppliedRevision = _state.AppliedRevision,
-                        RulesLoaded = _state.RulesLoaded,
-                        TargetsLoaded = _state.TargetsLoaded,
-                        SnapshotBytes = _state.SnapshotBytes,
-                        RulesetModifiedUtc = _state.RulesetModifiedUtc,
-                        Enabled = _config.Enabled && (Volatile.Read(ref _snapshot)?.Header.Engine.Enabled ?? false),
-                        Errors = new List<string>(_state.Errors)
-                    };
-                }
+                    AppVersion = _state.AppVersion,
+                    StartedAtUtc = _state.StartedAtUtc,
+                    LastLoadAtUtc = _state.LastLoadAtUtc,
+                    LastLoadDurationMs = _state.LastLoadDurationMs,
+                    LastLoadTrigger = _state.LastLoadTrigger,
+                    AppliedRevision = _state.AppliedRevision,
+                    RulesLoaded = _state.RulesLoaded,
+                    TargetsLoaded = _state.TargetsLoaded,
+                    SnapshotBytes = _state.SnapshotBytes,
+                    RulesetModifiedUtc = _state.RulesetModifiedUtc,
+                    Enabled = _config.Enabled && (Volatile.Read(ref _snapshot)?.Header.Engine.Enabled ?? false),
+                    Errors = new List<string>(_state.Errors)
+                };
+            }
 
-                RuntimeStateWriter.Write(_config.RuntimeStatePath, copy, _stats);
-            }
-            catch (Exception ex)
-            {
-                _log.Write("DNS Override: не удалось записать " + _config.RuntimeStatePath + ".", ex);
-            }
+            _runtimeState.Write(copy, _stats);
         }
 
         #endregion

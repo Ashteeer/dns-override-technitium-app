@@ -33,6 +33,7 @@ namespace DnsOverride
         ILogSink? _log;
         AppConfig _config = AppConfig.Default;
         RulesetLoader? _loader;
+        RuntimeStateChannel? _runtimeState;
         DnsSOARecordData? _soaRecord;
 
         #endregion
@@ -87,6 +88,14 @@ namespace DnsOverride
             _loader = null;
             _config = parsed;
 
+            // Запасной каталог для runtime-state.json — тот, куда сервер и так пишет
+            // dnsApp.config. Если основной путь недоступен (read-only монтирование,
+            // нет ACL), приложение не падает и не молчит, а пишет состояние сюда.
+            _runtimeState = new RuntimeStateChannel(
+                parsed.RuntimeStatePath,
+                Path.Combine(dnsServer.ApplicationFolder, "runtime-state.json"),
+                _log);
+
             if (!parsed.Enabled)
             {
                 dnsServer.WriteLog("DNS Override: приложение выключено в dnsApp.config — все запросы уходят в passthru.");
@@ -94,19 +103,11 @@ namespace DnsOverride
                 _state.Enabled = false;
                 _state.LastLoadTrigger = null;
 
-                try
-                {
-                    RuntimeStateWriter.Write(parsed.RuntimeStatePath, _state, _stats);
-                }
-                catch (Exception ex)
-                {
-                    dnsServer.WriteLog("DNS Override: не удалось записать " + parsed.RuntimeStatePath + ".", ex);
-                }
-
+                _runtimeState.Write(_state, _stats);
                 return;
             }
 
-            RulesetLoader loader = new RulesetLoader(parsed, _log, _stats, _state);
+            RulesetLoader loader = new RulesetLoader(parsed, _log, _stats, _state, _runtimeState);
             _loader = loader;
 
             await loader.StartAsync().ConfigureAwait(false);
@@ -210,7 +211,14 @@ namespace DnsOverride
         /// </summary>
         internal void WriteRuntimeState()
         {
-            _loader?.WriteRuntimeState();
+            if (_loader is not null)
+            {
+                _loader.WriteRuntimeState();
+                return;
+            }
+
+            // Приложение выключено в конфиге: загрузчика нет, но состояние есть.
+            _runtimeState?.Write(_state, _stats);
         }
 
         #endregion
@@ -239,13 +247,33 @@ namespace DnsOverride
                 + " (правило " + (match.IsApex ? "apex" : "wildcard") + " на " + snapshot.GetRuleDomain(match.LineIndex) + ")");
         }
 
+        /// <summary>
+        /// Версия ровно в том виде, в каком её показывает Technitium в разделе Apps
+        /// и отдаёт в /api/apps/list: незначащие нули отбрасываются, поэтому сборка
+        /// 0.3.0.0 — это «0.3», а не «0.3.0». Бот сравнивает эту строку с тегом
+        /// релиза, и любое расхождение в формате означало бы вечное «доступно
+        /// обновление» (см. docs/decisions.md, D25).
+        /// </summary>
         static string AppVersion
         {
             get
             {
                 Version? version = Assembly.GetExecutingAssembly().GetName().Version;
 
-                return version is null ? "0.0.0" : version.Major + "." + version.Minor + "." + version.Build;
+                if (version is null)
+                    return "0.0";
+
+                string text = version.Major + "." + version.Minor;
+
+                if (version.Build > 0)
+                {
+                    text += "." + version.Build;
+
+                    if (version.Revision > 0)
+                        text += "." + version.Revision;
+                }
+
+                return text;
             }
         }
 

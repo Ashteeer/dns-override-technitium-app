@@ -130,13 +130,31 @@ sudo install -d -o root -g dns-override -m 0770 /etc/dns-override
 Права нужны обе стороны: приложению — чтение `ruleset.dat` и запись
 `runtime-state.json` (плюс `runtime-state.json.tmp` в том же каталоге).
 
+Если в юните DNS-сервера есть `ProtectSystem=full` или `strict`, одних прав мало:
+systemd монтирует `/etc` внутрь сервиса только для чтения, и приложение получает
+`Read-only file system` при любых ACL. Нужен drop-in — установщик кладёт его сам:
+
+```ini
+# /etc/systemd/system/dns.service.d/10-dns-override.conf
+[Service]
+ReadWritePaths=/etc/dns-override
+```
+
+Отдельный файл, а не правка `dns.service`: установщик Technitium перезаписывает
+юнит при обновлении, а этот каталог не трогает. Применяется только после
+`systemctl restart dns` — `daemon-reload` недостаточно.
+
+Запись `runtime-state.json` необязательна: без неё приложение работает как
+обычно, а бот просто не видит применённую ревизию. Совсем выключить —
+`"runtimeStatePath": ""` в `dnsApp.config`.
+
 ## Тесты
 
 ```bash
 dotnet test
 ```
 
-88 тестов; что именно они покрывают — [`ruleset-loading.md §6`](ruleset-loading.md#6-тесты).
+95 тестов; что именно они покрывают — [`ruleset-loading.md §6`](ruleset-loading.md#6-тесты).
 Тестам, в отличие от приложения, библиотеки Technitium копируются в выходной
 каталог (`Private=true`), иначе тестовый хост их не найдёт.
 
@@ -147,6 +165,8 @@ dotnet test
 | Приложение не появилось в админке | в zip нет `DnsOverrideApp.deps.json`, либо в него попали `TechnitiumLibrary.*.dll`; далее — логи Technitium `/etc/dns/logs/` |
 | Приложение есть, но правила не применяются | `/etc/dns-override/runtime-state.json` → `errors`, `appliedRevision` |
 | `appliedRevision` = `null` | файл ни разу не загрузился: нет прав, нет файла, выключен `enabled` в `dnsApp.config` |
+| `runtime-state.json` не появляется, в логе `Read-only file system` | каталог закрыт на запись самим systemd — нужен drop-in с `ReadWritePaths` и перезапуск `dns.service`. В боте: «🧰 Сервис» → «🔐 Права доступа» |
+| `runtime-state.json` не появляется, в логе `Access … is denied` | нет ACL: `setfacl -m u:<пользователь dns.service>:rwx /etc/dns-override` |
 | `appliedRevision` отстаёт от `revision` в файле | права на файл; на bind-mount/NFS не работает inotify — сработает страховочный опрос (60 с) |
 | Конфиг из админки не сохраняется | приложение отвергло JSON; текст ошибки — в логе Technitium |
 | Непонятно, почему домен подменяется | `python3 tools/check-ruleset.py /etc/dns-override/ruleset.dat --query имя.домена` — покажет победившее правило |

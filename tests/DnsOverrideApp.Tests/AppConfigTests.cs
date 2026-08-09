@@ -64,6 +64,17 @@ public class AppConfigTests
         Assert.Equal(expected, config.PollIntervalSec);
     }
 
+    [Fact]
+    public void EmptyRuntimeStatePathDisablesTheChannel()
+    {
+        // Пустая строка — не битый конфиг, а «не пиши runtime-state.json».
+        // Приложение обязано после этого работать: файл нужен только боту.
+        AppConfig config = AppConfig.Parse("""{"runtimeStatePath":""}""");
+
+        Assert.Equal("", config.RuntimeStatePath);
+        Assert.False(new RuntimeStateChannel(config.RuntimeStatePath, "", new TestLogSink()).Enabled);
+    }
+
     [Theory]
     [InlineData("not json")]
     [InlineData("[]")]

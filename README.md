@@ -31,7 +31,10 @@ curl -fsSL https://raw.githubusercontent.com/Ashteeer/dns-override-technitium-ap
 2. ставит **Technitium DNS Server**, если его нет (официальный установщик,
    он же подтягивает .NET); у свежей установки логин и пароль — `admin`/`admin`,
    тогда `--password` можно не передавать;
-3. создаёт `/etc/dns-override` и выдаёт Technitium доступ туда через POSIX ACL;
+3. создаёт `/etc/dns-override`, выдаёт Technitium доступ туда через POSIX ACL и
+   кладёт drop-in `dns.service.d/10-dns-override.conf` с `ReadWritePaths` —
+   без него при `ProtectSystem=` в юните запись падает с `Read-only file system`
+   при любых правах;
 4. качает `DnsOverrideApp.zip` из последнего GitHub-релиза и ставит его через
    API (`apps/install`, либо `apps/update`, если приложение уже есть).
 
@@ -72,6 +75,8 @@ src/DnsOverrideApp/
 ├── RulesetLoader.cs          watcher на каталог + дебаунс + страховочный опрос
 ├── ResponseBuilder.cs        сборка ответа по target и qtypePolicy
 ├── RuntimeStateWriter.cs     обратный канал runtime-state.json (tmp + rename)
+├── RuntimeStateChannel.cs    его же отказоустойчивость: жалоба один раз,
+│                             запасной путь, самовозврат на основной
 ├── Stats.cs                  счётчики запросов
 └── Ruleset/                  разбор и поиск по ruleset.dat
     ├── RulesetParser.cs      проверки формата, sha256, count, порядка
@@ -79,7 +84,7 @@ src/DnsOverrideApp/
     ├── RulesetHeader.cs      заголовок: engine, targets, qtypePolicy
     ├── TargetSpec.cs         адреса, ttl, rotation, emptyFamilyPolicy
     └── DomainKey.cs          QNAME → rdomain без аллокаций
-tests/DnsOverrideApp.Tests/   88 тестов (xUnit)
+tests/DnsOverrideApp.Tests/   95 тестов (xUnit)
 deploy/install.sh             установка готового релиза в Technitium
 build/                        build.sh, build.ps1 → build/out/DnsOverrideApp.zip
 docs/                         документация, специфичная для приложения
@@ -99,7 +104,7 @@ docs/                         документация, специфичная �
 
 ```bash
 ./build/build.sh          # → build/out/DnsOverrideApp.zip
-dotnet test               # 88 тестов
+dotnet test               # 95 тестов
 ```
 
 Нужны .NET SDK 10, склонированные рядом `TechnitiumSoftware/DnsServer` и
@@ -119,7 +124,7 @@ Technitium DNS Server © Shreyas Zare (Technitium).
 ## Статус
 
 Приложение реализовано и собирается локально: `build/out/DnsOverrideApp.zip`,
-88 тестов зелёные. На живом Technitium DNS Server ещё не проверялось.
+95 тестов зелёные. На живом Technitium DNS Server ещё не проверялось.
 
 Кэш DNS-сервера приложение не сбрасывает — интерфейс приложений Technitium такой
 операции не предоставляет. Сброс делается вручную кнопкой в боте и целиком

@@ -242,6 +242,19 @@ public class ResponseTests
     }
 
     [Fact]
+    public async Task VersionIsReportedTheWayTechnitiumShowsIt()
+    {
+        using AppHost host = await AppHost.StartAsync(Overriding());
+
+        string version = host.ReadRuntimeState().GetProperty("appVersion").GetString()!;
+
+        // Technitium отбрасывает незначащие нули: сборка 0.3.0.0 показывается как
+        // «0.3». Бот сравнивает эту строку с тегом релиза, и лишний «.0» здесь
+        // означал бы вечное «доступно обновление» (D25).
+        Assert.Matches(@"^\d+\.\d+(\.[1-9]\d*(\.[1-9]\d*)?)?$", version);
+    }
+
+    [Fact]
     public async Task StatsAreCounted()
     {
         using AppHost host = await AppHost.StartAsync(Overriding());

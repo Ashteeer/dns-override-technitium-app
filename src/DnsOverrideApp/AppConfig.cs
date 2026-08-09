@@ -83,9 +83,10 @@ namespace DnsOverride
             if (rulesetPath.Length == 0)
                 throw new FormatException("dnsApp.config: rulesetPath не может быть пустым.");
 
+            // Пустая строка — не ошибка, а способ выключить запись runtime-state.json:
+            // файл нужен только боту для отчёта о применённой ревизии, и на подмену
+            // DNS никак не влияет.
             string runtimeStatePath = GetString(root, "runtimeStatePath", DefaultRuntimeStatePath);
-            if (runtimeStatePath.Length == 0)
-                throw new FormatException("dnsApp.config: runtimeStatePath не может быть пустым.");
 
             bool enabled = GetBool(root, "enabled", true);
 

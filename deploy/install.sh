@@ -43,7 +43,9 @@ note() { printf '    %s\n' "$*"; }
 warn() { printf '    ⚠️  %s\n' "$*" >&2; }
 die()  { echo "$*" >&2; exit 1; }
 
-cleanup() { [[ -n "$TMP_DIR" ]] && rm -rf "$TMP_DIR"; }
+# return 0 обязателен: код последней команды в ловушке EXIT становится кодом
+# выхода скрипта, и без него даже `--help` завершался бы единицей.
+cleanup() { [[ -n "$TMP_DIR" ]] && rm -rf "$TMP_DIR"; return 0; }
 trap cleanup EXIT
 
 usage() {
@@ -205,6 +207,43 @@ else
     note "ACL выставлен для пользователя '$DNS_USER'"
 fi
 
+# ---------------------------------------------------------- запись из-под systemd
+
+# ACL решает вопрос прав, но не вопрос монтирования. Если в dns.service стоит
+# ProtectSystem=full или strict, systemd монтирует /etc внутрь сервиса только
+# для чтения, и приложение получает «Read-only file system» при записи
+# runtime-state.json — при любых ACL. Лечится единственным способом:
+# ReadWritePaths с нужным каталогом.
+#
+# Кладём отдельным drop-in, а не правкой dns.service: официальный установщик
+# Technitium перезаписывает юнит на каждом обновлении, а этот каталог не трогает.
+DROPIN_DIR="/etc/systemd/system/${DNS_UNIT}.d"
+DROPIN="$DROPIN_DIR/10-dns-override.conf"
+DROPIN_CHANGED=0
+
+if systemctl cat "$DNS_UNIT" >/dev/null 2>&1; then
+    TMP_DROPIN=$(mktemp)
+    cat > "$TMP_DROPIN" <<EOF
+# Создано установщиком DNS Override. Нужен, чтобы приложение могло писать
+# runtime-state.json при ProtectSystem= в юните DNS-сервера.
+[Service]
+ReadWritePaths=$SHARED_DIR
+EOF
+    if [[ -f "$DROPIN" ]] && cmp -s "$TMP_DROPIN" "$DROPIN"; then
+        note "drop-in $DROPIN уже на месте"
+    elif [[ -f "$DROPIN" ]] && grep -q "^ReadWritePaths=$SHARED_DIR$" "$DROPIN"; then
+        # Файл мог создать бот — там ещё AmbientCapabilities. Не затираем.
+        note "drop-in $DROPIN уже содержит ReadWritePaths"
+    else
+        install -d -m 0755 "$DROPIN_DIR"
+        install -m 0644 "$TMP_DROPIN" "$DROPIN"
+        systemctl daemon-reload
+        DROPIN_CHANGED=1
+        note "записан $DROPIN"
+    fi
+    rm -f "$TMP_DROPIN"
+fi
+
 # --------------------------------------------------------------- релиз с GitHub
 
 echo "==> релиз $APP_REPO"
@@ -281,10 +320,18 @@ VERSION=$(api_curl "$API_URL/api/apps/list?token=$(urlencode "$API_TOKEN")" \
 
 echo
 echo "Готово: «$APP_NAME» ${VERSION:+версии $VERSION }установлено ($TAG)."
-echo "1. Настройки приложения: админка → Apps → $APP_NAME → Config."
-echo "2. Правила приложение читает из $SHARED_DIR/ruleset.dat."
+STEP=1
+echo "$STEP. Настройки приложения: админка → Apps → $APP_NAME → Config."; STEP=$((STEP + 1))
+echo "$STEP. Правила приложение читает из $SHARED_DIR/ruleset.dat."
 echo "   Этот файл компилирует Telegram-бот:"
 echo "   https://github.com/Ashteeer/dns-override-telegram-bot"
+STEP=$((STEP + 1))
+if [[ $DROPIN_CHANGED -eq 1 ]]; then
+    echo "$STEP. Перезапустите DNS-сервер — без этого drop-in не действует и"
+    echo "   приложение не сможет записать runtime-state.json:"
+    echo "   systemctl restart $DNS_UNIT"
+    STEP=$((STEP + 1))
+fi
 if [[ $DNS_JUST_INSTALLED -eq 1 ]]; then
-    echo "3. Смените пароль admin в админке Technitium (http://<ip>:5380)."
+    echo "$STEP. Смените пароль admin в админке Technitium (http://<ip>:5380)."
 fi
