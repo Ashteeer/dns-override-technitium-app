@@ -37,10 +37,11 @@ curl -fsSL https://raw.githubusercontent.com/Ashteeer/dns-override-technitium-ap
 
 Правила приложение только исполняет — компилирует их
 [Telegram-бот](https://github.com/Ashteeer/dns-override-telegram-bot).
-**Если нужен и бот, ставьте сразу его** — он поставит приложение сам, одной командой:
+**Если нужен и бот, ставьте сразу его** — он поставит приложение сам и спросит
+всё необходимое:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ashteeer/dns-override-telegram-bot/main/deploy/install.sh | sudo bash -s -- --bot-token 123456789:AA... --admin-id 123456789
+curl -fsSL https://raw.githubusercontent.com/Ashteeer/dns-override-telegram-bot/main/deploy/install.sh | sudo bash
 ```
 
 ### Опции установщика
