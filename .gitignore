@@ -1,0 +1,27 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+artifacts/
+
+# Локальная сборка / артефакты
+build/out/
+build/publish/
+*.zip
+
+# Секреты и локальные окружения
+.env
+.env.*
+!.env.example
+*.token
+appsettings.Local.json
+
+# Локальные конфиги правил (не для репозитория)
+/etc-dns-override/
+*.local.json
+
+# Служебное
+.DS_Store
+.vscode/
+.idea/

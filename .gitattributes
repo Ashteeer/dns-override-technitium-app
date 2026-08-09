@@ -1,0 +1,11 @@
+# Целевая платформа — Ubuntu: скрипты сборки обязаны быть с LF.
+# ruleset.dat — контракт с ботом, переводы строк только LF (docs/ruleset-format.md §1).
+* text=auto eol=lf
+*.sh text eol=lf
+*.cs text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.dat text eol=lf
+*.ps1 text eol=crlf

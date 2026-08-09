@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>DnsOverrideApp.Tests</AssemblyName>
+    <RootNamespace>DnsOverride.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/DnsOverrideApp/DnsOverrideApp.csproj" />
+    <!-- В самом приложении Private=false (сборки уже есть у DNS-сервера), тестам их нужно скопировать. -->
+    <ProjectReference Include="$(TechnitiumAppCommonProject)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="TechnitiumLibrary">
+      <HintPath>$(TechnitiumLibraryBin)/TechnitiumLibrary.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="TechnitiumLibrary.Net">
+      <HintPath>$(TechnitiumLibraryBin)/TechnitiumLibrary.Net.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="TechnitiumLibrary.IO">
+      <HintPath>$(TechnitiumLibraryBin)/TechnitiumLibrary.IO.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<OutputType>Library</OutputType>
+		<AssemblyName>DnsOverrideApp</AssemblyName>
+		<RootNamespace>DnsOverride</RootNamespace>
+		<Version>0.1.0</Version>
+		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+		<Authors>Ashteeer</Authors>
+		<Company>DNS Override</Company>
+		<Product>DNS Override</Product>
+		<!-- Приложение собирается против DnsServerCore.ApplicationCommon и
+		     TechnitiumLibrary (обе GPL-3.0), поэтому лицензия та же. -->
+		<PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+		<Copyright>Copyright (C) 2026 Ashteeer</Copyright>
+		<Description>Подменяет DNS-ответы по скомпилированному правилу-файлу ruleset.dat: домен из списка получает заданные IPv4/IPv6, всё остальное резолвится штатно. Правила собирает Telegram-бот, приложение только исполняет их.</Description>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<Nullable>enable</Nullable>
+		<LangVersion>latest</LangVersion>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Private=false: сборка уже загружена сервером, копия в zip ломает загрузку приложения. -->
+		<ProjectReference Include="$(TechnitiumAppCommonProject)">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="TechnitiumLibrary">
+			<HintPath>$(TechnitiumLibraryBin)/TechnitiumLibrary.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="TechnitiumLibrary.Net">
+			<HintPath>$(TechnitiumLibraryBin)/TechnitiumLibrary.Net.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Оба файла попадают в zip приложения: dnsApp.config — стартовый конфиг,
+		     README.md показывается в разделе Apps веб-консоли Technitium. -->
+		<None Include="dnsApp.config">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+		<None Include="README.md">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+	</ItemGroup>
+
+</Project>

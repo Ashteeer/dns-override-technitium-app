@@ -1,0 +1,30 @@
+<Project>
+
+	<!--
+	Приложения Technitium собираются против исходников сервера, а не против NuGet:
+	ProjectReference на DnsServerCore.ApplicationCommon.csproj и Reference на
+	собранные TechnitiumLibrary.*.dll. Путь к обоим репозиториям — $(TechnitiumSrc).
+
+	Порядок определения:
+	  1. переменная окружения TECHNITIUM_SRC (или -p:TechnitiumSrc=...)
+	  2. каталог рядом с этим репозиторием      ../DnsServer
+	  3. каталог на уровень выше (umbrella)     ../../DnsServer
+	-->
+	<PropertyGroup>
+		<TechnitiumSrc Condition="'$(TechnitiumSrc)' == '' and '$(TECHNITIUM_SRC)' != ''">$(TECHNITIUM_SRC)</TechnitiumSrc>
+		<TechnitiumSrc Condition="'$(TechnitiumSrc)' == '' and Exists('$(MSBuildThisFileDirectory)../DnsServer')">$(MSBuildThisFileDirectory)..</TechnitiumSrc>
+		<TechnitiumSrc Condition="'$(TechnitiumSrc)' == '' and Exists('$(MSBuildThisFileDirectory)../../DnsServer')">$(MSBuildThisFileDirectory)../..</TechnitiumSrc>
+		<TechnitiumSrc Condition="'$(TechnitiumSrc)' == ''">$(MSBuildThisFileDirectory)..</TechnitiumSrc>
+
+		<TechnitiumAppCommonProject>$(TechnitiumSrc)/DnsServer/DnsServerCore.ApplicationCommon/DnsServerCore.ApplicationCommon.csproj</TechnitiumAppCommonProject>
+		<TechnitiumLibraryBin>$(TechnitiumSrc)/TechnitiumLibrary/bin</TechnitiumLibraryBin>
+	</PropertyGroup>
+
+	<Target Name="VerifyTechnitiumSrc" BeforeTargets="BeforeBuild">
+		<Error Condition="!Exists('$(TechnitiumAppCommonProject)')"
+		       Text="Не найден $(TechnitiumAppCommonProject). Склонируйте TechnitiumSoftware/DnsServer рядом с репозиторием или задайте TECHNITIUM_SRC. См. docs/build-and-install.md." />
+		<Error Condition="!Exists('$(TechnitiumLibraryBin)/TechnitiumLibrary.Net.dll')"
+		       Text="Не найден $(TechnitiumLibraryBin)/TechnitiumLibrary.Net.dll. Соберите TechnitiumLibrary: dotnet build TechnitiumLibrary/TechnitiumLibrary.Net/TechnitiumLibrary.Net.csproj -c Release. См. docs/build-and-install.md." />
+	</Target>
+
+</Project>

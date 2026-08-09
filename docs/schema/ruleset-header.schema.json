@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dns-override.local/schema/ruleset-header.schema.json",
+  "title": "DNS Override — заголовок ruleset.dat (первая строка после сигнатуры !DNSOVR1)",
+  "type": "object",
+  "required": ["version", "revision", "generatedAt", "count", "sha256", "engine", "targets", "qtypePolicy"],
+  "additionalProperties": true,
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "revision": { "type": "integer", "minimum": 0, "description": "Монотонный счётчик сборок. Приложение зеркалит его в runtime-state.appliedRevision." },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "generator": { "type": "string", "maxLength": 128, "description": "Имя и версия писателя, например 'dns-override-bot/0.4.1'." },
+    "count": { "type": "integer", "minimum": 0, "description": "Число строк правил в теле." },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "sha256 тела — всех байт после первого \\n, включая завершающий \\n." },
+
+    "engine": {
+      "type": "object",
+      "required": ["defaultAction"],
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true, "description": "false — приложение возвращает null на все запросы." },
+        "defaultAction": { "enum": ["passthru", "override"], "default": "passthru" },
+        "defaultTarget": { "type": ["string", "null"], "description": "Имя target из targets[]. Обязателен при defaultAction=override." },
+        "logMatches": { "type": "boolean", "default": false },
+        "logSampleRate": { "type": "number", "minimum": 0, "maximum": 1, "default": 0 }
+      }
+    },
+
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "description": "Правило ссылается на элемент по индексу в этом массиве.",
+      "items": { "$ref": "#/$defs/target" }
+    },
+
+    "qtypePolicy": {
+      "type": "object",
+      "description": "Ключ — имя типа записи (A, AAAA, HTTPS, SVCB, MX, TXT, ANY…) либо '*' как значение по умолчанию.",
+      "required": ["*"],
+      "propertyNames": { "pattern": "^([A-Z0-9]{1,10}|\\*)$" },
+      "additionalProperties": { "enum": ["target", "nodata", "nxdomain", "passthru"] }
+    }
+  },
+
+  "$defs": {
+    "target": {
+      "type": "object",
+      "required": ["name", "mode"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$", "description": "Только для логов и runtime-state. Связь правила с target идёт по индексу." },
+        "mode": { "enum": ["address", "nxdomain", "nodata", "refused"] },
+        "ipv4": { "type": "array", "items": { "type": "string", "format": "ipv4" }, "maxItems": 32, "default": [] },
+        "ipv6": { "type": "array", "items": { "type": "string", "format": "ipv6" }, "maxItems": 32, "default": [] },
+        "ttl": { "type": "integer", "minimum": 0, "maximum": 604800, "default": 60 },
+        "rotation": { "enum": ["none", "round-robin", "random"], "default": "none" },
+        "emptyFamilyPolicy": {
+          "enum": ["nodata", "passthru", "answer"],
+          "default": "nodata",
+          "description": "Запрошено A/AAAA, а адресов этого семейства в target нет. nodata — пустой NOERROR (реальный адрес не утекает); passthru — обычный резолв; answer — пустой ответ как есть."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "address" } }, "required": ["mode"] },
+          "then": {
+            "anyOf": [
+              { "properties": { "ipv4": { "minItems": 1 } }, "required": ["ipv4"] },
+              { "properties": { "ipv6": { "minItems": 1 } }, "required": ["ipv6"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

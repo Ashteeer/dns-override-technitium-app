@@ -1,0 +1,11 @@
+!DNSOVR1 {"version":1,"revision":128,"generatedAt":"2026-08-09T12:34:56Z","generator":"dns-override-bot/0.1.0","count":10,"sha256":"4ec4034ad442619892a8c0d40560af874ad8a3c212bf636f9a84dfd310e93d24","engine":{"enabled":true,"defaultAction":"passthru","defaultTarget":null,"logMatches":false,"logSampleRate":0.0},"targets":[{"name":"default","mode":"address","ipv4":["10.8.0.1"],"ipv6":[],"ttl":60,"rotation":"none","emptyFamilyPolicy":"nodata"},{"name":"proxy-nl","mode":"address","ipv4":["10.8.0.2"],"ipv6":["fd00:dead:beef::2"],"ttl":60,"rotation":"round-robin","emptyFamilyPolicy":"nodata"},{"name":"blackhole","mode":"nxdomain","ttl":300}],"qtypePolicy":{"A":"target","AAAA":"target","HTTPS":"nodata","SVCB":"nodata","ANY":"nodata","*":"passthru"}}
+WO0 com.example.cdn-media
+WO0 com.facebook
+WP0 com.google
+WO0 com.google.test
+WO0 com.instagram
+WO2 net.example.ads
+AO1 org.example
+WO0 org.rutracker
+WO0 uk.co.example.static
+WO0 xn--p1ai.xn--80aswg
