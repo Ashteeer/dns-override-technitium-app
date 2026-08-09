@@ -16,6 +16,50 @@
 Вся его логика: прочитать файл, найти самое длинное совпадение по суффиксу домена,
 собрать ответ.
 
+## Быстрый старт
+
+Одна команда на чистом сервере Ubuntu 24.04+. Компилировать ничего не нужно —
+скрипт качает готовый zip из последнего релиза:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ashteeer/dns-override-technitium-app/main/deploy/install.sh | sudo bash -s -- --password ПАРОЛЬ_АДМИНКИ
+```
+
+Скрипт рассчитан на полностью новую машину:
+
+1. ставит системные пакеты: `curl`, `ca-certificates`, `acl`;
+2. ставит **Technitium DNS Server**, если его нет (официальный установщик,
+   он же подтягивает .NET); у свежей установки логин и пароль — `admin`/`admin`,
+   тогда `--password` можно не передавать;
+3. создаёт `/etc/dns-override` и выдаёт Technitium доступ туда через POSIX ACL;
+4. качает `DnsOverrideApp.zip` из последнего GitHub-релиза и ставит его через
+   API (`apps/install`, либо `apps/update`, если приложение уже есть).
+
+Правила приложение только исполняет — компилирует их
+[Telegram-бот](https://github.com/Ashteeer/dns-override-telegram-bot).
+**Если нужен и бот, ставьте сразу его** — он поставит приложение сам, одной командой:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ashteeer/dns-override-telegram-bot/main/deploy/install.sh | sudo bash -s -- --bot-token 123456789:AA... --admin-id 123456789
+```
+
+### Опции установщика
+
+| Опция | Что делает |
+|---|---|
+| `--api IP:PORT` | адрес админки Technitium; схему можно опустить (по умолчанию `127.0.0.1:5380`) |
+| `--token TOKEN` | постоянный API-токен вместо логина с паролем |
+| `--user USER` | логин админки (по умолчанию `admin`) |
+| `--password PASS` | пароль админки (по умолчанию `admin` — как у свежей установки) |
+| `--name NAME` | имя приложения в админке (по умолчанию «DNS Override») |
+| `--ref TAG` | поставить конкретный релиз; по умолчанию последний |
+| `--no-dns-server` | не ставить Technitium DNS Server, даже если его нет |
+| `--insecure` | не проверять TLS-сертификат админки |
+| `--help` | справка |
+
+Ручные варианты установки (админка → **Apps → Install**, `curl` в `/api/apps/install`)
+описаны в [Сборке и установке](docs/build-and-install.md).
+
 ## Структура
 
 ```
@@ -34,7 +78,8 @@ src/DnsOverrideApp/
     ├── RulesetHeader.cs      заголовок: engine, targets, qtypePolicy
     ├── TargetSpec.cs         адреса, ttl, rotation, emptyFamilyPolicy
     └── DomainKey.cs          QNAME → rdomain без аллокаций
-tests/DnsOverrideApp.Tests/   87 тестов (xUnit)
+tests/DnsOverrideApp.Tests/   88 тестов (xUnit)
+deploy/install.sh             установка готового релиза в Technitium
 build/                        build.sh, build.ps1 → build/out/DnsOverrideApp.zip
 docs/                         документация, специфичная для приложения
 ```
@@ -46,16 +91,19 @@ docs/                         документация, специфичная �
 - [Формат `ruleset.dat`](docs/ruleset-format.md) — контракт, общий с ботом
 - [Семантика правил](docs/rule-matching.md) — wildcard/apex, алгоритм поиска
 
-## Сборка
+## Сборка (только для разработки)
+
+Пользователю собирать приложение не нужно: готовый zip лежит в каждом релизе,
+а `deploy/install.sh` качает его сам.
 
 ```bash
 ./build/build.sh          # → build/out/DnsOverrideApp.zip
-dotnet test               # 87 тестов
+dotnet test               # 88 тестов
 ```
 
-Нужны склонированные рядом `TechnitiumSoftware/DnsServer` и собранный
-`TechnitiumSoftware/TechnitiumLibrary` — подробности в
-[Сборка и установка](docs/build-and-install.md).
+Нужны .NET SDK 10, склонированные рядом `TechnitiumSoftware/DnsServer` и
+собранный `TechnitiumSoftware/TechnitiumLibrary` — подробности в
+[Сборке и установке](docs/build-and-install.md).
 
 ## Лицензия
 
@@ -70,7 +118,7 @@ Technitium DNS Server © Shreyas Zare (Technitium).
 ## Статус
 
 Приложение реализовано и собирается локально: `build/out/DnsOverrideApp.zip`,
-87 тестов зелёные. На живом Technitium DNS Server ещё не проверялось.
+88 тестов зелёные. На живом Technitium DNS Server ещё не проверялось.
 
 Кэш DNS-сервера приложение не сбрасывает — интерфейс приложений Technitium такой
 операции не предоставляет. Сброс делается вручную кнопкой в боте и целиком

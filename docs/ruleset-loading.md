@@ -201,7 +201,7 @@ open(O_RDONLY) → строка заголовка → парс JSON → про�
 
 ## 6. Тесты
 
-Покрытие реализовано в `tests/DnsOverrideApp.Tests` (87 тестов, `dotnet test`):
+Покрытие реализовано в `tests/DnsOverrideApp.Tests` (88 тестов, `dotnet test`):
 
 | Что проверяется | Файл |
 |---|---|

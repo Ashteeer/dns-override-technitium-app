@@ -2,6 +2,27 @@
 
 Целевая платформа — Ubuntu 24.04 LTS+. Сборка локальная, CI/CD не используется.
 
+## Установка без сборки
+
+Готовый `DnsOverrideApp.zip` лежит ассетом в каждом релизе — собирать его
+пользователю не нужно. Одна команда на чистой машине:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ashteeer/dns-override-technitium-app/main/deploy/install.sh | sudo bash -s -- --password ПАРОЛЬ_АДМИНКИ
+```
+
+[`deploy/install.sh`](../deploy/install.sh) ставит пакеты (`curl`,
+`ca-certificates`, `acl`), при отсутствии — сам Technitium DNS Server, создаёт
+`/etc/dns-override` с ACL для пользователя Technitium, качает zip из последнего
+релиза и заливает его в `apps/install` (или `apps/update`, если приложение уже
+стоит). Опции — `--api`, `--token`, `--user`, `--password`, `--name`, `--ref`,
+`--no-dns-server`, `--insecure`.
+
+Тот же результат даёт установщик бота: он ставит приложение через API сам.
+Ручные варианты — в разделе [Установка](#установка) ниже.
+
+Всё, что следует дальше, нужно только для разработки приложения.
+
 ## Требования
 
 - .NET SDK 10.0+ (`apt install dotnet-sdk-10.0` или `dotnet-install.sh`)
@@ -72,7 +93,9 @@ dotnet build TechnitiumLibrary/TechnitiumLibrary.Net/TechnitiumLibrary.Net.cspro
 
 ## Установка
 
-Через админку: **Apps → Install** → выбрать `DnsOverrideApp.zip`.
+Скриптом (без сборки) — см. [выше](#установка-без-сборки). Вручную:
+
+через админку: **Apps → Install** → выбрать `DnsOverrideApp.zip`.
 
 Через API:
 
@@ -88,16 +111,16 @@ curl -F "file=@build/out/DnsOverrideApp.zip" \
 
 ## Подготовка каталога правил
 
+Каталог создают оба установщика — и [`deploy/install.sh`](../deploy/install.sh)
+этого репозитория, и установщик бота: они выставляют POSIX ACL, которые
+действуют немедленно, без перезапуска `dns.service`. Вручную:
+
 ```bash
 sudo groupadd -f dns-override
 sudo usermod -aG dns-override dns                 # пользователь Technitium
 sudo usermod -aG dns-override dns-override-bot    # пользователь бота
 sudo install -d -o root -g dns-override -m 0770 /etc/dns-override
 ```
-
-Проще — запустить [`install.sh`](https://github.com/Ashteeer/dns-override-telegram-bot/blob/main/deploy/install.sh)
-из репозитория бота: он ставит POSIX ACL, которые действуют немедленно, без
-перезапуска `dns.service`.
 
 В каталоге живут ровно два файла: `ruleset.dat` (пишет бот) и `runtime-state.json`
 (пишет приложение). Для первого запуска можно положить пример из
@@ -113,7 +136,7 @@ sudo install -d -o root -g dns-override -m 0770 /etc/dns-override
 dotnet test
 ```
 
-87 тестов; что именно они покрывают — [`ruleset-loading.md §6`](ruleset-loading.md#6-тесты).
+88 тестов; что именно они покрывают — [`ruleset-loading.md §6`](ruleset-loading.md#6-тесты).
 Тестам, в отличие от приложения, библиотеки Technitium копируются в выходной
 каталог (`Private=true`), иначе тестовый хост их не найдёт.
 

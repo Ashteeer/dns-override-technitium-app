@@ -6,7 +6,7 @@
 		<OutputType>Library</OutputType>
 		<AssemblyName>DnsOverrideApp</AssemblyName>
 		<RootNamespace>DnsOverride</RootNamespace>
-		<Version>0.1.0</Version>
+		<Version>0.2.0</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 		<Authors>Ashteeer</Authors>
 		<Company>DNS Override</Company>
