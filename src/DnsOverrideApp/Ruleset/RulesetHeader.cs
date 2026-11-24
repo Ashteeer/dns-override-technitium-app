@@ -18,7 +18,7 @@ namespace DnsOverride.Ruleset
     {
         #region constants
 
-        public const int SupportedVersion = 1;
+        public const int SupportedVersion = 2;
         const int MaxTargets = 256;
 
         #endregion
@@ -31,7 +31,7 @@ namespace DnsOverride.Ruleset
 
         #region constructor
 
-        RulesetHeader(int version, long revision, string generatedAt, string? generator, int count, string sha256, EngineSettings engine, TargetSpec[] targets, QtypePolicy qtypePolicy, int defaultTargetIndex, IReadOnlyList<string> warnings)
+        RulesetHeader(int version, long revision, string generatedAt, string? generator, int count, string sha256, EngineSettings engine, TargetSpec[] targets, QtypePolicy qtypePolicy, int defaultTargetIndex, IReadOnlyList<string> warnings, BypassPolicy policy)
         {
             Version = version;
             Revision = revision;
@@ -44,6 +44,7 @@ namespace DnsOverride.Ruleset
             QtypePolicy = qtypePolicy;
             DefaultTargetIndex = defaultTargetIndex;
             Warnings = warnings;
+            Policy = policy;
         }
 
         #endregion
@@ -72,8 +73,8 @@ namespace DnsOverride.Ruleset
                     throw new RulesetFormatException(where + ": ожидался JSON-объект.");
 
                 int version = JsonUtil.RequireInt32(root, "version", where);
-                if (version != SupportedVersion)
-                    throw new RulesetFormatException(where + ": version=" + version + " не поддерживается (приложение понимает " + SupportedVersion + ").");
+                if (version is not (1 or SupportedVersion))
+                    throw new RulesetFormatException(where + ": version=" + version + " не поддерживается (приложение понимает 1 и " + SupportedVersion + ").");
 
                 long revision = JsonUtil.RequireInt64(root, "revision", where);
                 string generatedAt = JsonUtil.RequireString(root, "generatedAt", where);
@@ -132,7 +133,13 @@ namespace DnsOverride.Ruleset
 
                 QtypePolicy qtypePolicy = QtypePolicy.Parse(JsonUtil.RequireProperty(root, "qtypePolicy", where), warnings);
 
-                return new RulesetHeader(version, revision, generatedAt, generator, count, sha256, engine, targets, qtypePolicy, defaultTargetIndex, warnings);
+                if (version == 1 && root.TryGetProperty("policy", out _))
+                    throw new RulesetFormatException(where + ": policy требует version=2.");
+                BypassPolicy policy = version == SupportedVersion
+                    ? BypassPolicy.Parse(JsonUtil.RequireProperty(root, "policy", where), targetCount)
+                    : BypassPolicy.Empty;
+
+                return new RulesetHeader(version, revision, generatedAt, generator, count, sha256, engine, targets, qtypePolicy, defaultTargetIndex, warnings, policy);
             }
         }
 
@@ -161,6 +168,7 @@ namespace DnsOverride.Ruleset
         #region properties
 
         public int Version { get; }
+        public BypassPolicy Policy { get; }
 
         public long Revision { get; }
 

@@ -14,6 +14,7 @@ namespace DnsOverride.Tests;
 sealed class TestDnsServer : IDnsServer
 {
     public readonly List<string> Log = new List<string>();
+    public Func<DnsDatagram, IPEndPoint, Task<DnsDatagram>>? OriginalQuery { get; set; }
 
     public TestDnsServer(string applicationFolder)
     {
@@ -56,7 +57,8 @@ sealed class TestDnsServer : IDnsServer
 
     public Task<DnsDatagram> DirectQueryAsync(DnsDatagram request, int timeout = 4000, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-    public Task<DnsDatagram> DirectQueryAsync(DnsDatagram request, IPEndPoint remoteEP, int timeout = 4000, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<DnsDatagram> DirectQueryAsync(DnsDatagram request, IPEndPoint remoteEP, int timeout = 4000, CancellationToken cancellationToken = default)
+        => (OriginalQuery ?? throw new NotSupportedException())(request, remoteEP);
 
     public Task<DnsDatagram> ResolveAsync(DnsQuestionRecord question, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 }

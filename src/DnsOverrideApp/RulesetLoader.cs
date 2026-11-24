@@ -155,7 +155,7 @@ namespace DnsOverride
                     _state.LastLoadDurationMs = stopwatch.ElapsedMilliseconds;
                     _state.LastLoadTrigger = trigger;
                     _state.AppliedRevision = snapshot.Header.Revision;
-                    _state.RulesLoaded = snapshot.Count;
+                    _state.RulesLoaded = snapshot.Count + snapshot.Header.Policy.Count;
                     _state.TargetsLoaded = snapshot.Header.Targets.Length;
                     _state.SnapshotBytes = snapshot.SizeBytes;
                     _state.RulesetModifiedUtc = modifiedUtc;

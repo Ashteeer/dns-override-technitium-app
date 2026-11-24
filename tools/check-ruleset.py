@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 import sys
@@ -41,7 +42,7 @@ class Ruleset:
     def __init__(self, header: dict, lines: list[bytes]):
         self.header = header
         self.lines = lines                                    # отсортированное тело
-        self.keys = [ln.split(b" ", 1)[1] for ln in lines]    # rdomain для бинарного поиска
+        self.keys = [ln.partition(b" ")[2] for ln in lines]  # rdomain для бинарного поиска
 
 
 def parse(path: Path) -> tuple[Ruleset | None, list[str]]:
@@ -61,6 +62,8 @@ def parse(path: Path) -> tuple[Ruleset | None, list[str]]:
         header = json.loads(head_line[len(MAGIC) + 1:].decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         return None, [f"заголовок не разбирается как JSON: {exc}"]
+    if not isinstance(header, dict):
+        return None, ["заголовок должен быть JSON-объектом"]
 
     if body and not body.endswith(b"\n"):
         errors.append("тело не заканчивается переводом строки")
@@ -89,6 +92,54 @@ def check_header_schema(header: dict) -> list[str]:
         where = "/".join(str(p) for p in err.path) or "<header>"
         out.append(f"заголовок: {where}: {err.message}")
     return out
+
+
+def check_policy(header: dict) -> list[str]:
+    version = header.get("version")
+    if type(version) is not int or version not in (1, 2):
+        return [f"неподдерживаемая версия {version!r}"]
+    if version == 1:
+        return ["policy требует version=2"] if "policy" in header else []
+    policy = header.get("policy")
+    if not isinstance(policy, dict):
+        return ["policy должен быть объектом"]
+    errors = []
+    for key in ("allowDomains", "protectedZones", "allowNetworks", "patterns"):
+        items = policy.get(key, [])
+        if not isinstance(items, list):
+            errors.append(f"policy.{key}: ожидался массив")
+            continue
+        for item in items:
+            if key == "patterns":
+                if not isinstance(item, dict):
+                    errors.append("policy.patterns: ожидался объект")
+                    continue
+                index = item.get("targetIndex")
+                action = item.get("action")
+                value = item.get("value")
+                if (
+                    type(index) is not int or not 0 <= index < len(header.get("targets", []))
+                    or action not in ("override", "passthru", "allowlist")
+                    or (action != "override" and index != 0)
+                    or item.get("kind") not in ("substring", "regexp")
+                    or not isinstance(value, str) or not 0 < len(value) <= 1024
+                    or not value.isascii() or not value.isprintable()
+                ):
+                    errors.append(f"policy.patterns: некорректное правило {item!r}")
+            elif not isinstance(item, str):
+                errors.append(f"policy.{key}: ожидалась строка")
+            elif key == "allowNetworks":
+                try:
+                    if "/" not in item or "%" in item:
+                        raise ValueError(item)
+                    ipaddress.ip_network(item)
+                except ValueError:
+                    errors.append(f"policy.{key}: некорректная сеть {item!r}")
+            else:
+                domain = item.removeprefix("@") if key == "allowDomains" else item
+                if len(domain) > 253 or any(not LABEL_RE.fullmatch(label) for label in domain.split(".")):
+                    errors.append(f"policy.{key}: некорректный домен {item!r}")
+    return errors
 
 
 def check_body(rs: Ruleset) -> list[str]:
@@ -153,6 +204,43 @@ def lookup(rs: Ruleset, qname: str) -> tuple[str, str | None, str]:
     default = engine.get("defaultAction", "passthru")
     q = qname.strip(".").lower().encode("idna").decode("ascii") if any(ord(c) > 127 for c in qname) else qname.strip(".").lower()
     labels = q.split(".")
+    policy = rs.header.get("policy", {})
+    suffixes = {".".join(labels[i:]) for i in range(len(labels))}
+    approved = set(policy.get("allowDomains", []))
+    if "@" + q in approved or suffixes & approved:
+        return "passthru", None, "белый список доменов"
+    protected = len(labels) < 2 or suffixes.intersection(policy.get("protectedZones", []))
+    patterns = policy.get("patterns", [])
+
+    def match_patterns(allowlist: bool):
+        for rule in patterns:
+            if (rule["action"] == "allowlist") != allowlist:
+                continue
+            if rule["kind"] == "regexp":
+                try:
+                    import regex
+                except ImportError:
+                    return "unknown", None, "для проверки regexp установите regex"
+                try:
+                    if not regex.search(rule["value"], q, regex.ASCII, timeout=0.01):
+                        continue
+                except (TimeoutError, regex.error):
+                    return "unknown", None, "не удалось проверить regexp"
+            elif rule["value"] not in q:
+                continue
+            action = "passthru" if allowlist else rule["action"]
+            target = rs.header["targets"][rule["targetIndex"]]["name"] if action == "override" else None
+            return action, target, "шаблон GeoSite"
+        return None
+
+    def with_ip(action: str, target: str | None, reason: str):
+        if action == "override" and policy.get("allowNetworks"):
+            reason += " — белый список IP проверяется по реальному DNS-ответу"
+        return action, target, reason
+
+    found = match_patterns(allowlist=True)
+    if found:
+        return found
     rq = labels[::-1]
 
     for d in range(len(rq), 0, -1):
@@ -174,8 +262,11 @@ def lookup(rs: Ruleset, qname: str) -> tuple[str, str | None, str]:
             name = rs.header["targets"][idx]["name"] if action == "override" else None
             matched = ".".join(reversed(key.decode().split(".")))
             kind = "apex" if scope == b"A" else "wildcard"
-            return action, name, f"правило {kind} на '{matched}'"
-    return default, engine.get("defaultTarget"), "правил не найдено — defaultAction"
+            return with_ip(action, name, f"правило {kind} на '{matched}'")
+    found = None if protected else match_patterns(allowlist=False)
+    if found:
+        return with_ip(*found)
+    return with_ip(default, engine.get("defaultTarget"), "правил не найдено — defaultAction")
 
 
 def main() -> int:
@@ -198,6 +289,7 @@ def main() -> int:
         return 1
 
     errors += check_header_schema(rs.header)
+    errors += check_policy(rs.header)
     errors += check_body(rs)
 
     for e in errors[:50]:

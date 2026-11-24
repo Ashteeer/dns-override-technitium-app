@@ -57,7 +57,7 @@ public class ParserTests
     public void FutureHeaderVersionIsRejected()
     {
         RulesetBuilder builder = RulesetBuilder.Sample();
-        builder.Version = 2;
+        builder.Version = 3;
 
         Assert.Contains("version", Rejected(builder).Message);
     }

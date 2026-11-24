@@ -192,7 +192,7 @@ namespace DnsOverride.Ruleset
             return domainOffset;
         }
 
-        static void ValidateRDomain(ReadOnlySpan<byte> rdomain, int lineNumber)
+        internal static void ValidateRDomain(ReadOnlySpan<byte> rdomain, int lineNumber)
         {
             if ((rdomain.Length == 0) || (rdomain.Length > MaxRDomainLength))
                 throw new RulesetFormatException("строка " + lineNumber + ": длина rdomain вне диапазона 1.." + MaxRDomainLength + ".");

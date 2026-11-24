@@ -1,12 +1,12 @@
 /*
 DNS Override — приложение для Technitium DNS Server.
 
-Точка интеграции: IDnsApplication + IDnsAuthoritativeRequestHandler.
+Точки интеграции: IDnsApplication, IDnsAuthoritativeRequestHandler и IDnsPostProcessor.
 Возврат null → Technitium резолвит запрос обычным путём (passthru),
 возврат DnsDatagram → ответ уходит клиенту как есть (override).
 
-Вся логика приложения — прочитать ruleset.dat, найти самое длинное совпадение
-по суффиксу домена, собрать ответ. Правила собирает и разрешает конфликты бот.
+Приложение читает ruleset.dat, выбирает правило и проверяет белые списки.
+Правила собирает и разрешает конфликты бот.
 */
 
 using System;
@@ -21,7 +21,7 @@ using TechnitiumLibrary.Net.Dns.ResourceRecords;
 
 namespace DnsOverride
 {
-    public sealed class App : IDnsApplication, IDnsAuthoritativeRequestHandler, IDnsApplicationPreference
+    public sealed class App : IDnsApplication, IDnsAuthoritativeRequestHandler, IDnsApplicationPreference, IDnsPostProcessor
     {
         #region variables
 
@@ -127,7 +127,7 @@ namespace DnsOverride
 
         #region IDnsAuthoritativeRequestHandler
 
-        public Task<DnsDatagram?> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed)
+        public async Task<DnsDatagram?> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed)
         {
             _stats.CountQuery();
 
@@ -139,6 +139,14 @@ namespace DnsOverride
             DnsQuestionRecord question = request.Question[0];
 
             if (question.Class != DnsClass.IN)
+                return Passthru();
+
+            BypassPolicy bypass = snapshot.Header.Policy;
+            // Без разрешения на рекурсию нельзя перепроверить ответ через DirectQuery.
+            // Пропускаем и вложенные вызовы обработчика для целей CNAME/ANAME.
+            if (!isRecursionAllowed && (bypass.HasNames || bypass.HasNetworks))
+                return Passthru();
+            if (bypass.AllowsName(question.Name))
                 return Passthru();
 
             RuleMatch match = snapshot.Match(question.Name);
@@ -157,6 +165,12 @@ namespace DnsOverride
                 targetIndex = match.TargetIndex;
                 zone = ZoneName.FromRule(snapshot, match.LineIndex);
             }
+            else if (bypass.TryMatchRule(question.Name, out targetIndex))
+            {
+                if (targetIndex < 0)
+                    return Passthru();
+                zone = ZoneName.FromQuestion(question.Name);
+            }
             else
             {
                 if (snapshot.Header.Engine.DefaultAction == RuleAction.Passthru)
@@ -168,6 +182,15 @@ namespace DnsOverride
 
             TargetSpec target = snapshot.Header.Targets[targetIndex];
             QtypeAction policy = snapshot.Header.QtypePolicy.For(question.Type);
+
+            if (bypass.HasNetworks && policy != QtypeAction.Passthru)
+            {
+                DnsDatagram? original = await QueryOriginalAsync(request, remoteEP).ConfigureAwait(false);
+                if (original is null || original.Truncation ||
+                    original.RCODE is not (DnsResponseCode.NoError or DnsResponseCode.NxDomain) ||
+                    bypass.AllowsAnswer(original))
+                    return Passthru(original);
+            }
 
             DnsDatagram? response = ResponseBuilder.Build(request, isRecursionAllowed, _dnsServer!.UdpPayloadSize, _soaRecord!, target, policy, zone, out ResponseKind kind);
 
@@ -197,7 +220,30 @@ namespace DnsOverride
             if (match.Found)
                 LogMatch(snapshot, question, match, kind.ToString().ToLowerInvariant());
 
-            return Task.FromResult(response);
+            return response;
+        }
+
+        #endregion
+
+        #region IDnsPostProcessor
+
+        public async Task<DnsDatagram?> PostProcessAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response)
+        {
+            RulesetSnapshot? snapshot = _loader?.Snapshot;
+            if ((snapshot is null) || !snapshot.Header.Engine.Enabled || !response.RecursionAvailable ||
+                response.Truncation || response.NextDatagram is not null ||
+                response.RCODE is not (DnsResponseCode.NoError or DnsResponseCode.NxDomain) ||
+                request.OPCODE != DnsOpcode.StandardQuery || request.Question.Count != 1 ||
+                request.Question[0].Class != DnsClass.IN || !snapshot.Header.Policy.AllowsName(request.Question[0].Name))
+                return response;
+
+            // Passthru позволяет Technitium снова вызвать приложение для цели CNAME.
+            // DirectQuery пропускает authoritative handlers на всей цепочке, а
+            // постобработка не позволяет серверу снова разворачивать итоговый CNAME.
+            DnsDatagram? original = await QueryOriginalAsync(request, remoteEP).ConfigureAwait(false);
+            return original ?? new DnsDatagram(request.Identifier, true, request.OPCODE,
+                false, false, request.RecursionDesired, true, false, request.CheckingDisabled,
+                DnsResponseCode.ServerFailure, request.Question);
         }
 
         #endregion
@@ -225,11 +271,23 @@ namespace DnsOverride
 
         #region private
 
-        Task<DnsDatagram?> Passthru()
+        DnsDatagram? Passthru(DnsDatagram? response = null)
         {
             _stats.CountPassthru();
 
-            return Task.FromResult<DnsDatagram?>(null);
+            return response;
+        }
+
+        async Task<DnsDatagram?> QueryOriginalAsync(DnsDatagram request, IPEndPoint endpoint)
+        {
+            try
+            {
+                return await _dnsServer!.DirectQueryAsync(request, endpoint).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                return null;
+            }
         }
 
         void LogMatch(RulesetSnapshot snapshot, DnsQuestionRecord question, RuleMatch match, string outcome)
